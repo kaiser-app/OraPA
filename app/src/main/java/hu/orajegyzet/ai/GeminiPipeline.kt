@@ -52,6 +52,32 @@ class GeminiPipeline(
         }
     }
 
+    private fun buildRequest(endpoint: String): Request.Builder {
+        val url = if (apiKey.startsWith("AQ.")) {
+            "$BASE/v1beta/$endpoint"
+        } else {
+            "$BASE/v1beta/$endpoint?key=$apiKey"
+        }
+        val builder = Request.Builder().url(url)
+        if (apiKey.startsWith("AQ.")) {
+            builder.header("Authorization", "Bearer $apiKey")
+        }
+        return builder
+    }
+
+    private fun buildUploadStartRequest(): Request.Builder {
+        val url = if (apiKey.startsWith("AQ.")) {
+            "$BASE/upload/v1beta/files"
+        } else {
+            "$BASE/upload/v1beta/files?key=$apiKey"
+        }
+        val builder = Request.Builder().url(url)
+        if (apiKey.startsWith("AQ.")) {
+            builder.header("Authorization", "Bearer $apiKey")
+        }
+        return builder
+    }
+
     private fun generateInlineWithFallback(file: File, isLesson: Boolean): String {
         val modelsToTry = listOf(model, "gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-2.5-flash").distinct()
         val b64 = Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
@@ -75,11 +101,9 @@ class GeminiPipeline(
                 body.put("contents", JSONArray().put(userContent))
                 body.put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
 
-                val reqBuilder = Request.Builder()
-                    .url("$BASE/v1beta/models/$m:generateContent?key=$apiKey")
+                val req = buildRequest("models/$m:generateContent")
                     .post(body.toString().toRequestBody("application/json".toMediaType()))
-                if (apiKey.startsWith("AQ.")) reqBuilder.header("Authorization", "Bearer $apiKey")
-                val req = reqBuilder.build()
+                    .build()
 
                 return http.newCall(req).execute().use { r ->
                     val text = r.body?.string() ?: ""
@@ -167,8 +191,7 @@ class GeminiPipeline(
     /** Resumable feltöltés a Files API-ra; a file_uri-t adja vissza. */
     private fun uploadFile(file: File): String {
         val meta = JSONObject().put("file", JSONObject().put("display_name", file.name))
-        val startReq = Request.Builder()
-            .url("$BASE/upload/v1beta/files?key=$apiKey")
+        val startReq = buildUploadStartRequest()
             .header("X-Goog-Upload-Protocol", "resumable")
             .header("X-Goog-Upload-Command", "start")
             .header("X-Goog-Upload-Header-Content-Length", file.length().toString())
@@ -184,12 +207,13 @@ class GeminiPipeline(
             r.header("X-Goog-Upload-URL") ?: error("Hiányzó upload URL a Google-től")
         }
 
-        val upReq = Request.Builder()
+        val upReqBuilder = Request.Builder()
             .url(uploadUrl)
             .header("X-Goog-Upload-Command", "upload, finalize")
             .header("X-Goog-Upload-Offset", "0")
             .post(file.asRequestBody("audio/mp4".toMediaType()))
-            .build()
+        if (apiKey.startsWith("AQ.")) upReqBuilder.header("Authorization", "Bearer $apiKey")
+        val upReq = upReqBuilder.build()
 
         return http.newCall(upReq).execute().use { r ->
             val text = r.body?.string() ?: ""
@@ -202,11 +226,8 @@ class GeminiPipeline(
 
     /** Megvárja, amíg a feltöltött fájl állapota ACTIVE lesz a Google szerverén. */
     private fun waitForFileActive(fileUri: String) {
-        val name = fileUri.substringAfter("/files/").let { "files/$it" }
-        val req = Request.Builder()
-            .url("$BASE/v1beta/$name?key=$apiKey")
-            .get()
-            .build()
+        val id = fileUri.substringAfter("/files/")
+        val req = buildRequest("files/$id").get().build()
 
         var attempts = 0
         while (attempts < 30) {
@@ -237,11 +258,9 @@ class GeminiPipeline(
                         "Ez egy hangfelvétel. Készítsd el a JSON-választ a megadott séma szerint.")))))
             .put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
 
-        val reqBuilder = Request.Builder()
-            .url("$BASE/v1beta/models/$targetModel:generateContent?key=$apiKey")
+        val req = buildRequest("models/$targetModel:generateContent")
             .post(body.toString().toRequestBody("application/json".toMediaType()))
-        if (apiKey.startsWith("AQ.")) reqBuilder.header("Authorization", "Bearer $apiKey")
-        val req = reqBuilder.build()
+            .build()
 
         return http.newCall(req).execute().use { r ->
             val text = r.body?.string() ?: ""
@@ -266,10 +285,8 @@ class GeminiPipeline(
     }
 
     private fun deleteRemote(fileUri: String) {
-        val name = fileUri.substringAfter("/files/").let { "files/$it" }
-        val req = Request.Builder()
-            .url("$BASE/v1beta/$name?key=$apiKey")
-            .delete().build()
+        val id = fileUri.substringAfter("/files/")
+        val req = buildRequest("files/$id").delete().build()
         runCatching { http.newCall(req).execute().close() }
     }
 
