@@ -142,13 +142,29 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
                                     RagStatusBadge(activeProject.ragStatus)
                                 }
 
+                                var showDescription by remember { mutableStateOf(false) }
+
                                 if (activeProject.description.isNotBlank()) {
-                                    Spacer(Modifier.height(8.dp))
-                                    Text(
-                                        activeProject.description,
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.clickable { showDescription = !showDescription }
+                                    ) {
+                                        Text(
+                                            if (showDescription) "▾ Leírás elrejtése" else "▸ Leírás megtekintése",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    if (showDescription) {
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            activeProject.description,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
 
                                 if (activeProject.budget != null) {

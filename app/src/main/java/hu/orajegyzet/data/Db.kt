@@ -24,7 +24,9 @@ enum class NoteStatus { RECORDING, QUEUED, PROCESSING, DONE, ERROR }
 data class Note(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val lessonId: Long?,
-    val projectId: String? = null,        // Kapcsolat az aktív projekthez (pl. "prj-1")
+    val projectId: String? = null,        // Kapcsolat az aktív projekthez (pl. "prj-01")
+    val docCode: String = "",             // pl. "PROJ-001-20260910-EML-001" vagy "MAT-20260911-JEG-001"
+    val docType: String = "JEG",          // EML, JZK, JEG, VEZ, STA
     val subject: String,
     val dateIso: String,
     val startMin: Int,
@@ -124,6 +126,9 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE dateIso = :date AND status = 'DONE' ORDER BY startMin")
     suspend fun doneOn(date: String): List<Note>
 
+    @Query("SELECT * FROM notes WHERE dateIso = :date")
+    suspend fun allOnDate(date: String): List<Note>
+
     @Query("SELECT * FROM notes WHERE dateIso >= :sinceDate ORDER BY dateIso DESC, startMin DESC")
     fun since(sinceDate: String): Flow<List<Note>>
 
@@ -203,7 +208,7 @@ interface GanttTaskDao {
         ProjectEventEntity::class,
         GanttTaskEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

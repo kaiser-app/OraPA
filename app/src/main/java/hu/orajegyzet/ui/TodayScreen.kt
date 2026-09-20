@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import hu.orajegyzet.data.*
+import hu.orajegyzet.rec.RecordingService
 import hu.orajegyzet.work.ProcessingWorker
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -42,39 +43,142 @@ fun TodayScreen(
     val ctx = LocalContext.current
     val db = remember { Db.get(ctx) }
     val today = LocalDate.now()
-    val lessons by db.lessonDao().byDay(today.dayOfWeek.value)
-        .collectAsState(initial = emptyList())
+
+    val lessons by db.lessonDao().byDay(today.dayOfWeek.value).collectAsState(initial = emptyList())
+    val projects by db.projectDao().all().collectAsState(initial = emptyList())
     val notes by db.noteDao().all()
         .map { list -> list.filter { it.dateIso == today.toString() } }
         .collectAsState(initial = emptyList())
-    val recording = notes.any { it.status == NoteStatus.RECORDING }
-    var showTopicDialog by remember { mutableStateOf(false) }
-    var topic by remember { mutableStateOf("") }
 
-    if (showTopicDialog) {
+    val recording = notes.any { it.status == NoteStatus.RECORDING }
+
+    var showStartDialog by remember { mutableStateOf(false) }
+    var selectedContextType by remember { mutableStateOf("project") } // "lesson", "project", "custom"
+    var selectedLessonId by remember { mutableStateOf<Long?>(null) }
+    var selectedProjectId by remember { mutableStateOf("prj-01") }
+    var selectedDocType by remember { mutableStateOf("JEG") } // JEG, EML, JZK, VEZ, STA
+    var customTopic by remember { mutableStateOf("") }
+
+    if (showStartDialog) {
+        val activeProj = projects.firstOrNull { it.id == selectedProjectId }
+        val previewCode = NoteCodeGenerator.generate(
+            projectCode = if (selectedContextType == "project") activeProj?.code else null,
+            subject = when (selectedContextType) {
+                "lesson" -> lessons.firstOrNull { it.id == selectedLessonId }?.subject ?: "Óra"
+                "project" -> activeProj?.name ?: "Projekt"
+                else -> customTopic.ifBlank { "Téma" }
+            },
+            docType = selectedDocType,
+            date = LocalDate.now()
+        )
+
         AlertDialog(
-            onDismissRequest = { showTopicDialog = false },
-            title = { Text("Miről szól a felvétel?") },
+            onDismissRequest = { showStartDialog = false },
+            title = { Text("Új Felvétel & Jegyzőkönyv Indítása") },
             text = {
-                OutlinedTextField(topic, { topic = it },
-                    label = { Text("Téma (pl. értekezlet, előadás)") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("1. Kontextus / Téma választása:", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilterChip(
+                            selected = selectedContextType == "project",
+                            onClick = { selectedContextType = "project" },
+                            label = { Text("Projekt") }
+                        )
+                        FilterChip(
+                            selected = selectedContextType == "lesson",
+                            onClick = { selectedContextType = "lesson" },
+                            label = { Text("Órarendi óra") }
+                        )
+                        FilterChip(
+                            selected = selectedContextType == "custom",
+                            onClick = { selectedContextType = "custom" },
+                            label = { Text("Egyedi téma") }
+                        )
+                    }
+
+                    if (selectedContextType == "project" && projects.isNotEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            projects.forEach { p ->
+                                FilterChip(
+                                    selected = selectedProjectId == p.id,
+                                    onClick = { selectedProjectId = p.id },
+                                    label = { Text(p.code) }
+                                )
+                            }
+                        }
+                    } else if (selectedContextType == "lesson" && lessons.isNotEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            lessons.forEach { l ->
+                                FilterChip(
+                                    selected = selectedLessonId == l.id,
+                                    onClick = { selectedLessonId = l.id },
+                                    label = { Text(l.subject) }
+                                )
+                            }
+                        }
+                    } else if (selectedContextType == "custom") {
+                        OutlinedTextField(
+                            value = customTopic,
+                            onValueChange = { customTopic = it },
+                            label = { Text("Téma / Megbeszélés neve") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Text("2. Dokumentum Típusa:", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilterChip(selected = selectedDocType == "JEG", onClick = { selectedDocType = "JEG" }, label = { Text("📝 JEG") })
+                        FilterChip(selected = selectedDocType == "EML", onClick = { selectedDocType = "EML" }, label = { Text("📌 EML") })
+                        FilterChip(selected = selectedDocType == "JZK", onClick = { selectedDocType = "JZK" }, label = { Text("📋 JZK") })
+                        FilterChip(selected = selectedDocType == "VEZ", onClick = { selectedDocType = "VEZ" }, label = { Text("👑 VEZ") })
+                        FilterChip(selected = selectedDocType == "STA", onClick = { selectedDocType = "STA" }, label = { Text("📊 STA") })
+                    }
+
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                        Column(Modifier.padding(10.dp)) {
+                            Text("Generált Dok. Kód:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Text(previewCode, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    showTopicDialog = false
-                    onStartRecording(null, topic.ifBlank { "Jegyzet" })
-                    topic = ""
-                }) { Text("Felvétel indítása") }
+                Button(onClick = {
+                    showStartDialog = false
+                    val title = when (selectedContextType) {
+                        "lesson" -> lessons.firstOrNull { it.id == selectedLessonId }?.subject ?: "Óra"
+                        "project" -> activeProj?.name ?: "Projekt megbeszélés"
+                        else -> customTopic.ifBlank { "Megbeszélés" }
+                    }
+                    val prjId = if (selectedContextType == "project") selectedProjectId else null
+                    val prjCode = if (selectedContextType == "project") activeProj?.code else null
+
+                    RecordingService.start(
+                        ctx = ctx,
+                        lessonId = if (selectedContextType == "lesson") selectedLessonId else null,
+                        title = title,
+                        projectId = prjId,
+                        docType = selectedDocType,
+                        projectCode = prjCode
+                    )
+                }) { Text("● Felvétel Indítása") }
             },
-            dismissButton = { TextButton(onClick = { showTopicDialog = false }) { Text("Mégse") } }
+            dismissButton = { TextButton(onClick = { showStartDialog = false }) { Text("Mégse") } }
         )
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Fülelő · ma") },
+                title = {
+                    Text(
+                        "FÜ",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 22.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                },
                 actions = {
                     TextButton(onClick = onOpenAssistant) { Text("Projekt AI") }
                     TextButton(onClick = onOpenHistory) { Text("Korábbi") }
@@ -86,12 +190,7 @@ fun TodayScreen(
         floatingActionButton = {
             ExtendedFloatingActionButton(onClick = {
                 if (recording) onStopRecording()
-                else {
-                    val nowMin = LocalTime.now().let { it.hour * 60 + it.minute }
-                    val current = lessons.firstOrNull { nowMin in it.startMin until it.endMin }
-                    if (current != null) onStartRecording(current.id, null)
-                    else showTopicDialog = true
-                }
+                else showStartDialog = true
             }) {
                 Text(if (recording) "■ Felvétel leállítása" else "● Felvétel indítása")
             }
@@ -103,10 +202,26 @@ fun TodayScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
-                    Text("Mai órák", fontWeight = FontWeight.Medium, fontSize = 18.sp)
-                    if (lessons.isEmpty()) Text("Nincs felvitt óra mára — add hozzá az órarendben, vagy fényképezd be.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Mai órák & Projektek", fontWeight = FontWeight.Medium, fontSize = 18.sp)
+                        if (projects.isNotEmpty()) {
+                            TextButton(onClick = onOpenAssistant) {
+                                Text("📋 ${projects.firstOrNull()?.code ?: "Projektek"}")
+                            }
+                        }
+                    }
+                    if (lessons.isEmpty() && projects.isEmpty()) {
+                        Text(
+                            "Nincs felvitt óra vagy projekt mára.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
+
                 items(lessons) { l ->
                     val note = notes.firstOrNull { it.lessonId == l.id }
                     Card {
@@ -128,10 +243,12 @@ fun TodayScreen(
                         }
                     }
                 }
+
                 item {
                     Spacer(Modifier.height(8.dp))
-                    Text("Mai jegyzetek", fontWeight = FontWeight.Medium, fontSize = 18.sp)
+                    Text("Mai jegyzetek & Dok. Kódok", fontWeight = FontWeight.Medium, fontSize = 18.sp)
                 }
+
                 val processing = notes.filter {
                     it.status == NoteStatus.PROCESSING || it.status == NoteStatus.QUEUED
                 }
@@ -140,16 +257,23 @@ fun TodayScreen(
                         Row(Modifier.fillMaxWidth().padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("${n.subject} · ${fmt(n.startMin)}", fontWeight = FontWeight.Medium)
+                                Text("${n.subject} · ${n.docCode.ifBlank { fmt(n.startMin) }}", fontWeight = FontWeight.Medium)
                                 ProcessingIndicator(Modifier.padding(top = 4.dp))
                             }
                         }
                     }
                 }
+
                 items(notes.filter { it.status == NoteStatus.DONE }) { n ->
                     Card(onClick = { onOpenNote(n.id) }) {
                         Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                            Text("${n.subject} · ${fmt(n.startMin)}", fontWeight = FontWeight.Medium)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(n.subject, fontWeight = FontWeight.Bold)
+                                if (n.docCode.isNotBlank()) {
+                                    Text(n.docCode, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                            Spacer(Modifier.height(2.dp))
                             Text(n.summary.take(140) + if (n.summary.length > 140) "…" else "",
                                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -185,6 +309,7 @@ fun NoteDetailScreen(noteId: Long, onBack: () -> Unit) {
     DisposableEffect(Unit) { onDispose { runCatching { tts.stop(); tts.shutdown() } } }
 
     fun fullText(): String = buildString {
+        if (n.docCode.isNotBlank()) append("DOK. KÓD: ").append(n.docCode).append("\n")
         append(n.subject).append(" · ").append(n.dateIso).append("\n\n")
         if (n.summary.isNotBlank()) append("ÖSSZEFOGLALÓ\n").append(n.summary).append("\n\n")
         if (n.structured.isNotBlank()) append("JEGYZET\n").append(n.structured).append("\n\n")
@@ -193,11 +318,11 @@ fun NoteDetailScreen(noteId: Long, onBack: () -> Unit) {
     }
 
     Scaffold(topBar = {
-        TopAppBar(title = { Text(n.subject) }, navigationIcon = { BackButton(onBack) })
+        TopAppBar(title = { Text(if (n.docCode.isNotBlank()) n.docCode else n.subject) }, navigationIcon = { BackButton(onBack) })
     }) { pad ->
         LazyColumn(Modifier.padding(pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
-                Text("${n.dateIso} · ${fmt(n.startMin)}–${fmt(n.endMin)}" +
+                Text("${n.subject} · ${n.dateIso} · ${fmt(n.startMin)}–${fmt(n.endMin)}" +
                     (n.processedOnline?.let { if (it) " · online" else " · offline" } ?: ""),
                     color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
             }

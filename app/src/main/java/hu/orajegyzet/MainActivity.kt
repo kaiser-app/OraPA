@@ -20,6 +20,7 @@ import hu.orajegyzet.ui.ProjectAssistantScreen
 import hu.orajegyzet.ui.ScheduleScreen
 import hu.orajegyzet.ui.SettingsScreen
 import hu.orajegyzet.ui.TodayScreen
+import hu.orajegyzet.ui.WelcomeScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -50,7 +51,16 @@ class MainActivity : ComponentActivity() {
             hu.orajegyzet.ui.OraJegyzetTheme(online = online) {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     val nav = rememberNavController()
-                    NavHost(navController = nav, startDestination = "today") {
+                    NavHost(navController = nav, startDestination = "welcome") {
+                        composable("welcome") {
+                            WelcomeScreen(
+                                onEnterApp = {
+                                    nav.navigate("today") {
+                                        popUpTo("welcome") { inclusive = true }
+                                    }
+                                }
+                            )
+                        }
                         composable("today") {
                             TodayScreen(
                                 onOpenNote = { id -> nav.navigate("note/$id") },

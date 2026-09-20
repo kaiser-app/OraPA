@@ -15,6 +15,7 @@ import hu.orajegyzet.App
 import hu.orajegyzet.MainActivity
 import hu.orajegyzet.data.Db
 import hu.orajegyzet.data.Note
+import hu.orajegyzet.data.NoteCodeGenerator
 import hu.orajegyzet.data.NoteStatus
 import hu.orajegyzet.work.ProcessingWorker
 import kotlinx.coroutines.CoroutineScope
@@ -47,18 +48,28 @@ class RecordingService : Service() {
         when (intent?.action) {
             ACTION_STOP -> { stopAndProcess(); return START_NOT_STICKY }
             ACTION_START -> {
-                val lessonId = intent.getLongExtra("lessonId", -1)
+                val lessonId = intent.getLongExtra("lessonId", -1).takeIf { it >= 0 }
                 val title = intent.getStringExtra("title")
-                if (recorder == null) startRecording(if (lessonId >= 0) lessonId else null, title)
+                val projectId = intent.getStringExtra("projectId")
+                val docType = intent.getStringExtra("docType") ?: "JEG"
+                val projectCode = intent.getStringExtra("projectCode")
+                if (recorder == null) startRecording(lessonId, title, projectId, docType, projectCode)
             }
         }
         return START_NOT_STICKY
     }
 
-    private fun startRecording(lessonId: Long?, title: String?) {
+    private fun startRecording(
+        lessonId: Long?,
+        title: String?,
+        projectId: String? = null,
+        docType: String = "JEG",
+        projectCode: String? = null
+    ) {
         val db = Db.get(this)
         val now = LocalTime.now()
         val nowMin = now.hour * 60 + now.minute
+        val todayStr = LocalDate.now().toString()
 
         // jegyzet-sor létrehozása (fejléc: dátum + időpont + tantárgy/téma)
         val (subject, endMin) = runBlocking {
@@ -66,12 +77,28 @@ class RecordingService : Service() {
             (title?.takeIf { it.isNotBlank() } ?: l?.subject ?: "Felvétel") to
                 (l?.endMin ?: (nowMin + DEFAULT_MAX_MIN))
         }
+
+        val docCode = runBlocking {
+            val existingToday = db.noteDao().allOnDate(todayStr)
+            NoteCodeGenerator.generate(
+                projectCode = projectCode ?: projectId,
+                subject = subject,
+                docType = docType,
+                date = LocalDate.now(),
+                sequence = existingToday.size + 1
+            )
+        }
+
         val file = File(filesDir, "rec_${System.currentTimeMillis()}.m4a")
         noteId = runBlocking {
             db.noteDao().insert(
                 Note(
-                    lessonId = lessonId, subject = subject,
-                    dateIso = LocalDate.now().toString(),
+                    lessonId = lessonId,
+                    projectId = projectId,
+                    docCode = docCode,
+                    docType = docType,
+                    subject = subject,
+                    dateIso = todayStr,
                     startMin = nowMin, endMin = endMin,
                     status = NoteStatus.RECORDING, audioPath = file.absolutePath
                 )
@@ -155,11 +182,21 @@ class RecordingService : Service() {
         const val NOTIF_ID = 42
         const val DEFAULT_MAX_MIN = 45
 
-        fun start(ctx: Context, lessonId: Long?, title: String? = null) {
+        fun start(
+            ctx: Context,
+            lessonId: Long?,
+            title: String? = null,
+            projectId: String? = null,
+            docType: String = "JEG",
+            projectCode: String? = null
+        ) {
             val i = Intent(ctx, RecordingService::class.java)
                 .setAction(ACTION_START)
             lessonId?.let { i.putExtra("lessonId", it) }
             title?.let { i.putExtra("title", it) }
+            projectId?.let { i.putExtra("projectId", it) }
+            projectCode?.let { i.putExtra("projectCode", it) }
+            i.putExtra("docType", docType)
             ctx.startForegroundService(i)
         }
 
