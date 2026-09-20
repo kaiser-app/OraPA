@@ -50,9 +50,6 @@ class GeminiPipeline(
         if (trimmed.isBlank()) {
             throw RuntimeException("Hiányzó Gemini API-kulcs! Add meg a Beállítások képernyőn.")
         }
-        if (!trimmed.startsWith("AIza")) {
-            throw RuntimeException("Hibás API-kulcs formátum! A Google Gemini API-kulcs 'AIzaSy...'-vel kezdődik. töltsd le az ingyenes kulcsot: https://aistudio.google.com/apikey")
-        }
     }
 
     private fun generateInlineWithFallback(file: File, isLesson: Boolean): String {
@@ -78,10 +75,11 @@ class GeminiPipeline(
                 body.put("contents", JSONArray().put(userContent))
                 body.put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
 
-                val req = Request.Builder()
+                val reqBuilder = Request.Builder()
                     .url("$BASE/v1beta/models/$m:generateContent?key=$apiKey")
                     .post(body.toString().toRequestBody("application/json".toMediaType()))
-                    .build()
+                if (apiKey.startsWith("AQ.")) reqBuilder.header("Authorization", "Bearer $apiKey")
+                val req = reqBuilder.build()
 
                 return http.newCall(req).execute().use { r ->
                     val text = r.body?.string() ?: ""
@@ -151,10 +149,11 @@ class GeminiPipeline(
                         "Ez egy meglévő leirat. Készíts belőle ÚJ, jobb összefoglalót és jegyzetet a megadott séma szerint. A \"transcript\" mezőbe másold vissza változatlanul a leiratot.\n\nLeirat:\n$transcript")))))
             .put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
 
-        val req = Request.Builder()
+        val reqBuilder = Request.Builder()
             .url("$BASE/v1beta/models/$targetModel:generateContent?key=$apiKey")
             .post(body.toString().toRequestBody("application/json".toMediaType()))
-            .build()
+        if (apiKey.startsWith("AQ.")) reqBuilder.header("Authorization", "Bearer $apiKey")
+        val req = reqBuilder.build()
 
         return http.newCall(req).execute().use { r ->
             val text = r.body?.string() ?: ""
@@ -238,10 +237,11 @@ class GeminiPipeline(
                         "Ez egy hangfelvétel. Készítsd el a JSON-választ a megadott séma szerint.")))))
             .put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
 
-        val req = Request.Builder()
+        val reqBuilder = Request.Builder()
             .url("$BASE/v1beta/models/$targetModel:generateContent?key=$apiKey")
             .post(body.toString().toRequestBody("application/json".toMediaType()))
-            .build()
+        if (apiKey.startsWith("AQ.")) reqBuilder.header("Authorization", "Bearer $apiKey")
+        val req = reqBuilder.build()
 
         return http.newCall(req).execute().use { r ->
             val text = r.body?.string() ?: ""

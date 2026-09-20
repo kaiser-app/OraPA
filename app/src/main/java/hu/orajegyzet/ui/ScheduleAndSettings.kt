@@ -331,10 +331,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )
-                    if (s.geminiApiKey.isNotBlank() && !s.geminiApiKey.startsWith("AIza")) {
+                    if (s.geminiApiKey.isNotBlank() && s.geminiApiKey.length < 10) {
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "⚠️ A beírt kulcs nem tűnik érvényes Gemini API-kulcsnak (a kulcsnak 'AIza...'-vel kell kezdődnie). A 'Create API key' gomb ablakában kattints a 'Copy' gombra!",
+                            "⚠️ A beírt API-kulcs gyanúsan rövid. Másold ki az aistudio.google.com felületén generált teljes kulcsot!",
                             color = MaterialTheme.colorScheme.error,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
