@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun WelcomeScreen(onEnterApp: () -> Unit) {
+fun WelcomeScreen(onEnterApp: () -> Unit, onExitApp: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -99,19 +99,39 @@ fun WelcomeScreen(onEnterApp: () -> Unit) {
                 }
             }
 
-            // Belépés Gomb
-            Button(
-                onClick = onEnterApp,
+            // Belépés + Kilépés Gombok
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 500.dp)
-                    .height(54.dp)
+                    .widthIn(max = 500.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = "Belépés az Alkalmazásba ➔",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Button(
+                    onClick = onEnterApp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                ) {
+                    Text(
+                        text = "Belépés az Alkalmazásba ➔",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onExitApp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
+                    Text(
+                        text = "🚪 Kilépés az alkalmazásból",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
 
             Spacer(Modifier.height(12.dp))

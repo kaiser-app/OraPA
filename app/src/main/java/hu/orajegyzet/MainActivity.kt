@@ -58,7 +58,8 @@ class MainActivity : ComponentActivity() {
                                     nav.navigate("today") {
                                         popUpTo("welcome") { inclusive = true }
                                     }
-                                }
+                                },
+                                onExitApp = { finishAffinity() }
                             )
                         }
                         composable("today") {
