@@ -297,10 +297,17 @@ fun SettingsScreen(onBack: () -> Unit) {
                         value = s.geminiApiKey,
                         onValueChange = { s = s.copy(geminiApiKey = it.trim()) },
                         label = { Text("Gemini API-kulcs") },
+                        trailingIcon = {
+                            if (s.geminiApiKey.isNotEmpty()) {
+                                IconButton(onClick = { s = s.copy(geminiApiKey = "") }) {
+                                    Text("✕", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                }
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedButton(
                             onClick = {
                                 val intent = Intent(
@@ -309,9 +316,9 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 )
                                 ctx.startActivity(intent)
                             },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1.2f)
                         ) {
-                            Text("🔑 API-kulcs generálása")
+                            Text("🔑 Generálás", fontSize = 12.sp)
                         }
                         OutlinedButton(
                             onClick = {
@@ -323,7 +330,13 @@ fun SettingsScreen(onBack: () -> Unit) {
                             },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("📋 Beillesztés")
+                            Text("📋 Beillesztés", fontSize = 12.sp)
+                        }
+                        OutlinedButton(
+                            onClick = { s = s.copy(geminiApiKey = "") },
+                            modifier = Modifier.weight(0.8f)
+                        ) {
+                            Text("🗑️ Törlés", fontSize = 12.sp)
                         }
                     }
                     Text(
