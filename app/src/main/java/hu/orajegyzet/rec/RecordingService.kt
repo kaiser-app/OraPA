@@ -90,6 +90,9 @@ class RecordingService : Service() {
         }
 
         val file = File(filesDir, "rec_${System.currentTimeMillis()}.m4a")
+        isRecordingActive = true
+        recordingStartMillis = System.currentTimeMillis()
+
         noteId = runBlocking {
             db.noteDao().insert(
                 Note(
@@ -149,6 +152,7 @@ class RecordingService : Service() {
     }
 
     private fun stopAndProcess() {
+        isRecordingActive = false
         handler.removeCallbacks(safetyStop)
         try { recorder?.stop() } catch (_: Exception) {}
         recorder?.release(); recorder = null
@@ -181,6 +185,9 @@ class RecordingService : Service() {
         const val ACTION_STOP = "hu.orajegyzet.REC_STOP"
         const val NOTIF_ID = 42
         const val DEFAULT_MAX_MIN = 45
+
+        @Volatile var isRecordingActive = false
+        @Volatile var recordingStartMillis: Long = 0
 
         fun start(
             ctx: Context,

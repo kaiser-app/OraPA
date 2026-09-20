@@ -7,23 +7,34 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.speech.tts.TextToSpeech
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import hu.orajegyzet.ai.Extractive
+import hu.orajegyzet.ai.GeminiPipeline
 import hu.orajegyzet.data.*
 import hu.orajegyzet.rec.RecordingService
 import hu.orajegyzet.work.ProcessingWorker
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
@@ -46,6 +57,7 @@ fun TodayScreen(
 ) {
     val ctx = LocalContext.current
     val db = remember { Db.get(ctx) }
+    val scope = rememberCoroutineScope()
     val today = LocalDate.now()
 
     val lessons by db.lessonDao().byDay(today.dayOfWeek.value).collectAsState(initial = emptyList())
@@ -54,7 +66,8 @@ fun TodayScreen(
         .map { list -> list.filter { it.dateIso == today.toString() } }
         .collectAsState(initial = emptyList())
 
-    val recording = notes.any { it.status == NoteStatus.RECORDING }
+    val activeRecNote = notes.firstOrNull { it.status == NoteStatus.RECORDING }
+    val recording = activeRecNote != null || RecordingService.isRecordingActive
 
     var showStartDialog by remember { mutableStateOf(false) }
     var selectedContextType by remember { mutableStateOf("project") } // "lesson", "project", "custom"
@@ -62,6 +75,79 @@ fun TodayScreen(
     var selectedProjectId by remember { mutableStateOf("prj-01") }
     var selectedDocType by remember { mutableStateOf("JEG") } // JEG, EML, JZK, VEZ, STA
     var customTopic by remember { mutableStateOf("") }
+
+    // --- Élő Felvételi Időzítő ---
+    var elapsedSec by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(recording) {
+        if (recording) {
+            while (true) {
+                val start = RecordingService.recordingStartMillis
+                if (start > 0) {
+                    elapsedSec = (System.currentTimeMillis() - start) / 1000L
+                } else {
+                    elapsedSec++
+                }
+                delay(1000)
+            }
+        } else {
+            elapsedSec = 0L
+        }
+    }
+
+    // --- Külső Hangfájl Importálása ---
+    val audioPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { inputUri ->
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val destFile = File(ctx.filesDir, "ext_audio_${System.currentTimeMillis()}.m4a")
+                    ctx.contentResolver.openInputStream(inputUri)?.use { input ->
+                        destFile.outputStream().use { output -> input.copyTo(output) }
+                    }
+
+                    val todayStr = LocalDate.now().toString()
+                    val existingToday = db.noteDao().allOnDate(todayStr)
+                    val activeProj = projects.firstOrNull { it.id == selectedProjectId }
+
+                    val docCode = NoteCodeGenerator.generate(
+                        projectCode = activeProj?.code ?: "PROJ",
+                        subject = "Importált Hangfájl",
+                        docType = "JZK",
+                        date = LocalDate.now(),
+                        sequence = existingToday.size + 1
+                    )
+
+                    val nowMin = LocalTime.now().let { it.hour * 60 + it.minute }
+                    val newNoteId = db.noteDao().insert(
+                        Note(
+                            lessonId = null,
+                            projectId = selectedProjectId,
+                            docCode = docCode,
+                            docType = "JZK",
+                            subject = "Importált Hangfájl (${docCode})",
+                            dateIso = todayStr,
+                            startMin = nowMin,
+                            endMin = nowMin + 45,
+                            status = NoteStatus.QUEUED,
+                            audioPath = destFile.absolutePath
+                        )
+                    )
+                    ProcessingWorker.enqueue(ctx, newNoteId)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
+    // --- Forgó fül animáció rögzítés közben ---
+    val transition = rememberInfiniteTransition(label = "ear_pulse")
+    val earAngle by transition.animateFloat(
+        initialValue = -12f, targetValue = 12f,
+        animationSpec = infiniteRepeatable(tween(800, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+        label = "ear_angle"
+    )
 
     if (showStartDialog) {
         val activeProj = projects.firstOrNull { it.id == selectedProjectId }
@@ -182,18 +268,20 @@ fun TodayScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "FÜ",
-                        fontWeight = FontWeight.Black,
-                        fontSize = 22.sp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "🎙️ Fülelő",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 },
                 actions = {
-                    TextButton(onClick = onOpenAssistant) { Text("Projekt AI") }
-                    TextButton(onClick = onOpenHistory) { Text("Korábbi") }
-                    TextButton(onClick = onOpenSchedule) { Text("Órarend") }
-                    TextButton(onClick = onOpenSettings) { Text("Beállítások") }
+                    TextButton(onClick = onOpenAssistant) { Text("Projekt AI", maxLines = 1) }
+                    TextButton(onClick = onOpenHistory) { Text("Korábbi", maxLines = 1) }
+                    TextButton(onClick = onOpenSchedule) { Text("Órarend", maxLines = 1) }
+                    TextButton(onClick = onOpenSettings) { Text("Beállítások", maxLines = 1) }
                 }
             )
         },
@@ -209,8 +297,59 @@ fun TodayScreen(
         Box(Modifier.padding(pad).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             LazyColumn(
                 Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // --- A) ÉLŐ FELVÉTELI BANNER IDŐZÍTŐVEL ÉS MOZGÓ FÜLLEL ---
+                if (recording) {
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.error)
+                                        .rotate(earAngle),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("👂", fontSize = 26.sp)
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "● FELVÉTEL FOLYAMATBAN…",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    val m = elapsedSec / 60
+                                    val s = elapsedSec % 60
+                                    Text(
+                                        "%02d:%02d".format(m, s),
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 24.sp,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                                Button(
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                    onClick = onStopRecording
+                                ) {
+                                    Text("■ Leállítás", fontSize = 12.sp, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // --- B) AKCIÓ SÁV & KÜLSŐ HANG IMPORTÁLÁSA ---
                 item {
                     Row(
                         Modifier.fillMaxWidth(),
@@ -218,10 +357,10 @@ fun TodayScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("Mai órák & Projektek", fontWeight = FontWeight.Medium, fontSize = 18.sp)
-                        if (projects.isNotEmpty()) {
-                            TextButton(onClick = onOpenAssistant) {
-                                Text("📋 ${projects.firstOrNull()?.code ?: "Projektek"}")
-                            }
+                        OutlinedButton(
+                            onClick = { audioPicker.launch("audio/*") }
+                        ) {
+                            Text("📁 Hang importálása", fontSize = 12.sp, maxLines = 1)
                         }
                     }
                     if (lessons.isEmpty() && projects.isEmpty()) {
@@ -305,7 +444,8 @@ fun TodayScreen(
 fun NoteDetailScreen(noteId: Long, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    val note by Db.get(ctx).noteDao().byIdFlow(noteId).collectAsState(initial = null)
+    val db = remember { Db.get(ctx) }
+    val note by db.noteDao().byIdFlow(noteId).collectAsState(initial = null)
     val n = note ?: return
 
     var editing by remember { mutableStateOf(false) }
@@ -314,6 +454,9 @@ fun NoteDetailScreen(noteId: Long, onBack: () -> Unit) {
     var eTranscript by remember { mutableStateOf("") }
 
     var alertMessage by remember { mutableStateOf<String?>(null) }
+    var selectedCustomPrompt by remember { mutableStateOf<String?>(null) }
+    var customSummaryResult by remember { mutableStateOf<String?>(null) }
+    var isGeneratingCustomSummary by remember { mutableStateOf(false) }
 
     // Magyar felolvasó (beépített Android TTS, offline)
     val tts = remember {
@@ -365,6 +508,38 @@ fun NoteDetailScreen(noteId: Long, onBack: () -> Unit) {
                 alertMessage = "Sikeresen elmentve a Letöltések mappába:\n${targetFile.absolutePath}"
             } catch (e: Exception) {
                 alertMessage = "Hiba a fájl mentésekor: ${e.message}"
+            }
+        }
+    }
+
+    fun requestCustomSummary(type: String) {
+        isGeneratingCustomSummary = true
+        selectedCustomPrompt = type
+        customSummaryResult = "Összefoglaló generálása ($type)..."
+
+        scope.launch(Dispatchers.IO) {
+            try {
+                val s = Settings.get(ctx)
+                val sourceText = n.transcript.ifBlank { n.summary }
+                val prompt = when (type) {
+                    "Vezetői" -> "Készíts szigorúan vezetői összefoglalót (lényeg, fő döntések, stratégia) az alábbi szövegből:\n\n$sourceText"
+                    "Jegyzőkönyv" -> "Készíts hivatalos jegyzőkönyvet (jelenlévők, napirend, elhangzottak, határozatok) az alábbi szövegből:\n\n$sourceText"
+                    "Teendők" -> "Gyűjtsd össze az összes elhangzott teendőt, akciótervet és felelőst bullet-point listában:\n\n$sourceText"
+                    else -> "Készíts strukturált tanulmányi jegyzetet fogalmakkal és példákkal:\n\n$sourceText"
+                }
+
+                val resultText = if (s.geminiApiKey.isNotBlank()) {
+                    val pipeline = GeminiPipeline(s.geminiApiKey, s.geminiModel)
+                    pipeline.resummarize(prompt, n.subject, n.dateIso, false).summary
+                } else {
+                    Extractive.summarize(prompt, 6)
+                }
+
+                customSummaryResult = resultText
+            } catch (e: Exception) {
+                customSummaryResult = "Hiba: ${e.message}"
+            } finally {
+                isGeneratingCustomSummary = false
             }
         }
     }
@@ -425,32 +600,73 @@ fun NoteDetailScreen(noteId: Long, onBack: () -> Unit) {
                             }
                         }
 
-                        // 2. Másodlagos akciók
+                        // 2. Típus szerinti összefoglaló kérése
+                        Text("Különböző típusú összefoglaló kérése:", fontWeight = FontWeight.Medium, fontSize = 13.sp)
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             item {
-                                OutlinedButton(onClick = {
-                                    scope.launch { Db.get(ctx).noteDao().update(n.copy(status = NoteStatus.PROCESSING)) }
-                                    ProcessingWorker.resummarize(ctx, n.id)
-                                }) { Text("✨ Újra-összefoglalás", maxLines = 1) }
+                                FilterChip(
+                                    selected = false,
+                                    onClick = { requestCustomSummary("Vezetői") },
+                                    label = { Text("👑 Vezetői", maxLines = 1) }
+                                )
                             }
+                            item {
+                                FilterChip(
+                                    selected = false,
+                                    onClick = { requestCustomSummary("Jegyzőkönyv") },
+                                    label = { Text("📋 Jegyzőkönyv", maxLines = 1) }
+                                )
+                            }
+                            item {
+                                FilterChip(
+                                    selected = false,
+                                    onClick = { requestCustomSummary("Teendők") },
+                                    label = { Text("📌 Teendők & Akciók", maxLines = 1) }
+                                )
+                            }
+                            item {
+                                FilterChip(
+                                    selected = false,
+                                    onClick = { requestCustomSummary("Tanulmányi") },
+                                    label = { Text("📝 Részletes Jegyzet", maxLines = 1) }
+                                )
+                            }
+                        }
+
+                        // 3. Másodlagos akciók (Újrafeldolgozás hangfájlból & Újra-összefoglalás)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             val audioOk = n.audioPath?.let { File(it).exists() } == true
                             if (audioOk) {
                                 item {
-                                    OutlinedButton(onClick = {
-                                        val f = File(n.audioPath!!)
-                                        val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f)
-                                        val i = Intent(Intent.ACTION_SEND).setType("audio/mp4")
-                                            .putExtra(Intent.EXTRA_STREAM, uri)
-                                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        ctx.startActivity(Intent.createChooser(i, "Hang mentése / megosztása"))
-                                    }) { Text("🎧 Hang mentése", maxLines = 1) }
+                                    Button(onClick = {
+                                        scope.launch { db.noteDao().update(n.copy(status = NoteStatus.PROCESSING, error = "")) }
+                                        ProcessingWorker.reprocessAudio(ctx, n.id)
+                                    }) { Text("🔄 Újrafeldolgozás hangfájlból", maxLines = 1) }
                                 }
+                            }
+                            item {
+                                OutlinedButton(onClick = {
+                                    scope.launch { db.noteDao().update(n.copy(status = NoteStatus.PROCESSING, error = "")) }
+                                    ProcessingWorker.resummarize(ctx, n.id)
+                                }) { Text("✨ Újra-összefoglalás leiratból", maxLines = 1) }
                             }
                         }
 
                         if (n.audioPath != null && File(n.audioPath!!).exists()) {
-                            Text("A nyers hang kb. 30 percig érhető el, utána törlődik.",
+                            Text("A nyers hangfájl elérhető a készüléken.",
                                 fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+
+            if (customSummaryResult != null) {
+                item {
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text("Generált Összefoglaló (${selectedCustomPrompt ?: ""}):", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Spacer(Modifier.height(4.dp))
+                            MarkdownText(customSummaryResult!!)
                         }
                     }
                 }
@@ -473,7 +689,7 @@ fun NoteDetailScreen(noteId: Long, onBack: () -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {
                             scope.launch {
-                                Db.get(ctx).noteDao().update(
+                                db.noteDao().update(
                                     n.copy(summary = eSummary, structured = eStructured, transcript = eTranscript))
                                 editing = false
                             }

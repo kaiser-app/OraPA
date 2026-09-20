@@ -178,12 +178,11 @@ fun HistoryScreen(onOpenNote: (Long) -> Unit, onBack: () -> Unit) {
                                                         }
                                                     )
                                                     Column(Modifier.weight(1f)) {
-                                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                                            Text("${n.dateIso} · ${fmt(n.startMin)}", fontWeight = FontWeight.Medium)
-                                                            if (n.docCode.isNotBlank()) {
-                                                                Text(n.docCode, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                                            }
+                                                        Text("${n.dateIso} · ${fmt(n.startMin)}", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                                                        if (n.docCode.isNotBlank()) {
+                                                            Text(n.docCode, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                                         }
+                                                        Spacer(Modifier.height(2.dp))
                                                         val preview = when (n.status) {
                                                             NoteStatus.DONE -> n.summary.take(80).ifBlank { "(leirat kész)" }
                                                             NoteStatus.PROCESSING, NoteStatus.QUEUED -> "feldolgozás alatt…"
