@@ -331,6 +331,15 @@ fun SettingsScreen(onBack: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )
+                    if (s.geminiApiKey.isNotBlank() && !s.geminiApiKey.startsWith("AIza")) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "⚠️ A beírt kulcs nem tűnik érvényes Gemini API-kulcsnak (a kulcsnak 'AIza...'-vel kell kezdődnie). A 'Create API key' gomb ablakában kattints a 'Copy' gombra!",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                     Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
                         value = s.geminiModel,
