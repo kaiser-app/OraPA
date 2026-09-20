@@ -122,6 +122,14 @@ class ProcessingWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
                     error = ""
                 )
             )
+            // Kinyert döntések és feladatok mentése az aktív projekthez
+            val targetProjectId = note.projectId ?: "prj-01"
+            r.decisions.forEach { dec ->
+                db.projectEventDao().insert(dec.copy(projectId = targetProjectId, sourceMeetingId = note.id.toString()))
+            }
+            r.tasks.forEach { task ->
+                db.ganttTaskDao().insert(task.copy(projectId = targetProjectId))
+            }
             // A nyers hang nem törlődik azonnal: a beállított ideig megmarad
             // (visszahallgatás, mentés, újra-feldolgozás), utána egy késleltetett worker törli.
             AudioCleanupWorker.schedule(applicationContext, audio.absolutePath, noteId, settings.audioRetentionMin)

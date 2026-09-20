@@ -32,6 +32,7 @@ fun fmt(min: Int) = "%d:%02d".format(min / 60, min % 60)
 @Composable
 fun TodayScreen(
     onOpenNote: (Long) -> Unit,
+    onOpenAssistant: () -> Unit,
     onOpenSchedule: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenHistory: () -> Unit,
@@ -75,6 +76,7 @@ fun TodayScreen(
             TopAppBar(
                 title = { Text("Fülelő · ma") },
                 actions = {
+                    TextButton(onClick = onOpenAssistant) { Text("Projekt AI") }
                     TextButton(onClick = onOpenHistory) { Text("Korábbi") }
                     TextButton(onClick = onOpenSchedule) { Text("Órarend") }
                     TextButton(onClick = onOpenSettings) { Text("Beállítások") }

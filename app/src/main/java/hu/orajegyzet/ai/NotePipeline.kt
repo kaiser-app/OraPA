@@ -4,15 +4,20 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import hu.orajegyzet.data.AppSettings
+import hu.orajegyzet.data.GanttTaskEntity
 import hu.orajegyzet.data.Mode
+import hu.orajegyzet.data.ProjectEventEntity
 import org.json.JSONObject
+import java.time.LocalDate
 
 /** A feldolgozás kimenete. */
 data class NoteResult(
     val transcript: String,
     val summary: String,
     val structured: String,
-    val keywords: List<String>
+    val keywords: List<String>,
+    val decisions: List<ProjectEventEntity> = emptyList(),
+    val tasks: List<GanttTaskEntity> = emptyList()
 )
 
 /** Egy hangfájl → jegyzet feldolgozó. Két implementáció: Offline és Gemini. */
@@ -49,22 +54,64 @@ object ModeSelector {
 }
 
 /** Közös segéd: a modellek JSON-válaszának tűrőképes feldolgozása. */
-internal fun parseModelJson(raw: String, fallbackTranscript: String = ""): NoteResult {
+internal fun parseModelJson(raw: String, fallbackTranscript: String = "", projectId: String = "prj-01"): NoteResult {
     val cleaned = raw.trim()
         .removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+
+    val extractedDecisions = mutableListOf<ProjectEventEntity>()
+    val extractedTasks = mutableListOf<GanttTaskEntity>()
 
     // 1) Először a szabályos JSON (ha a modell tisztán adta)
     runCatching {
         val o = JSONObject(cleaned)
         val kw = mutableListOf<String>()
         o.optJSONArray("keywords")?.let { arr -> for (i in 0 until arr.length()) kw += arr.getString(i) }
+
+        // Döntések és események kinyerése
+        o.optJSONArray("decisions")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val item = arr.optJSONObject(i) ?: continue
+                extractedDecisions += ProjectEventEntity(
+                    projectId = projectId,
+                    date = LocalDate.now().toString(),
+                    type = item.optString("type", "decision"),
+                    title = item.optString("title", "Elfogadott döntés"),
+                    description = item.optString("description", ""),
+                    impact = item.optString("impact", "medium"),
+                    owner = item.optString("owner", "Projektvezető"),
+                    status = "open",
+                    decisionRationale = item.optString("rationale", "")
+                )
+            }
+        }
+
+        // Feladatok kinyerése
+        o.optJSONArray("tasks")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val item = arr.optJSONObject(i) ?: continue
+                val today = LocalDate.now()
+                extractedTasks += GanttTaskEntity(
+                    projectId = projectId,
+                    title = item.optString("title", "Új projektfeladat"),
+                    startDate = item.optString("startDate", today.toString()),
+                    dueDate = item.optString("dueDate", today.plusDays(14).toString()),
+                    progress = 0,
+                    assignee = item.optString("assignee", "Felelős"),
+                    status = "not_started",
+                    priority = item.optString("priority", "medium")
+                )
+            }
+        }
+
         val summary = o.optString("summary")
         if (summary.isNotBlank()) {
             return NoteResult(
                 transcript = o.optString("transcript", fallbackTranscript).ifBlank { fallbackTranscript },
                 summary = summary,
                 structured = o.optString("notes"),
-                keywords = kw
+                keywords = kw,
+                decisions = extractedDecisions,
+                tasks = extractedTasks
             )
         }
     }
@@ -86,34 +133,25 @@ internal fun parseModelJson(raw: String, fallbackTranscript: String = ""): NoteR
         ?.let { inner -> Regex("\"((?:[^\"\\\\]|\\\\.)*)\"").findAll(inner).map { unescape(it.groupValues[1]) }.toList() }
         ?: emptyList()
 
-    // ha még így sem találtunk semmit, legalább a nyers szöveg legyen az összefoglaló
     return if (summary.isBlank() && notes.isBlank()) {
-        NoteResult(fallbackTranscript.ifBlank { tr }, cleaned.take(2000), "", emptyList())
+        NoteResult(fallbackTranscript.ifBlank { tr }, cleaned.take(2000), "", emptyList(), extractedDecisions, extractedTasks)
     } else {
-        NoteResult(fallbackTranscript.ifBlank { tr }, summary, notes, kw)
+        NoteResult(fallbackTranscript.ifBlank { tr }, summary, notes, kw, extractedDecisions, extractedTasks)
     }
 }
 
 internal fun buildNotePrompt(isLesson: Boolean): String {
-    val role = if (isLesson) "tanár" else "előadó/felszólaló"
-    val event = if (isLesson) "tanóra" else "esemény (pl. előadás, értekezlet)"
-    return """Te egy precíz jegyzetelő asszisztens vagy.
+    val role = if (isLesson) "tanár/előadó" else "projektvezető/résztvevő"
+    val event = if (isLesson) "tanóra/előadás" else "projekt megbeszélés/egyeztetés"
+    return """Te egy vezető Projekt Asszisztens és jegyzetelő AI vagy.
 A bemenet egy $event hanganyaga vagy leirata magyarul.
 Válaszolj KIZÁRÓLAG érvényes JSON-nal, markdown nélkül, pontosan ezekkel a kulcsokkal:
 {"transcript": "teljes leirat (ha hangot kaptál; leirat-bemenetnél hagyd üresen)",
- "summary": "8-12 mondatos tömör összefoglaló magyarul",
- "notes": "strukturált jegyzet markdown formátumban: ## témakörök, **fontos fogalmak**, definíciók, példák, és ha elhangzott, teendők/feladatok",
- "keywords": ["5-10 kulcsfogalom"]}
-Ha a beszélőre hivatkozol, használd a(z) "$role" megfogalmazást (NE feltételezz tanárt, ha nem tanóráról van szó).
-Csak az elhangzottakra támaszkodj, ne találj ki tartalmat.
-FONTOS: ne ismételd meg ugyanazokat a mondatokat vagy bekezdéseket; minden gondolat csak egyszer szerepeljen."""
+ "summary": "8-12 mondatos tömör vezetői összefoglaló magyarul",
+ "notes": "strukturált jegyzet markdown formátumban: ## témakörök, **fontos fogalmak**, definíciók, példák, és elhangzott döntések",
+ "keywords": ["5-10 kulcsfogalom"],
+ "decisions": [{"title": "döntés címe", "description": "részletek", "type": "decision|risk|milestone", "impact": "high|medium|low", "owner": "felelős"}],
+ "tasks": [{"title": "feladat címe", "assignee": "felelős neve", "priority": "high|medium|low"}]}
+Ha a beszélőre hivatkozol, használd a(z) "$role" megfogalmazást.
+Csak az elhangzottakra támaszkodj, ne találj ki nem létező információt."""
 }
-
-internal const val NOTE_PROMPT_HU = """Te egy precíz jegyzetelő asszisztens vagy.
-A bemenet egy esemény hanganyaga vagy leirata magyarul.
-Válaszolj KIZÁRÓLAG érvényes JSON-nal, markdown nélkül, pontosan ezekkel a kulcsokkal:
-{"transcript": "teljes leirat",
- "summary": "8-12 mondatos tömör összefoglaló magyarul",
- "notes": "strukturált jegyzet markdown formátumban",
- "keywords": ["5-10 kulcsfogalom"]}
-Csak az elhangzottakra támaszkodj, ne ismételd a mondatokat."""

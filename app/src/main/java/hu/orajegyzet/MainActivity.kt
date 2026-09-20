@@ -16,6 +16,7 @@ import androidx.navigation.compose.rememberNavController
 import hu.orajegyzet.rec.RecordingService
 import hu.orajegyzet.ui.HistoryScreen
 import hu.orajegyzet.ui.NoteDetailScreen
+import hu.orajegyzet.ui.ProjectAssistantScreen
 import hu.orajegyzet.ui.ScheduleScreen
 import hu.orajegyzet.ui.SettingsScreen
 import hu.orajegyzet.ui.TodayScreen
@@ -53,11 +54,18 @@ class MainActivity : ComponentActivity() {
                         composable("today") {
                             TodayScreen(
                                 onOpenNote = { id -> nav.navigate("note/$id") },
+                                onOpenAssistant = { nav.navigate("assistant") },
                                 onOpenSchedule = { nav.navigate("schedule") },
                                 onOpenSettings = { nav.navigate("settings") },
                                 onOpenHistory = { nav.navigate("history") },
                                 onStartRecording = { lessonId, title -> startRecordingChecked(lessonId, title) },
                                 onStopRecording = { RecordingService.stop(this@MainActivity) }
+                            )
+                        }
+                        composable("assistant") {
+                            ProjectAssistantScreen(
+                                onBack = { nav.popBackStack() },
+                                onOpenNote = { id -> nav.navigate("note/$id") }
                             )
                         }
                         composable("note/{id}") { back ->
