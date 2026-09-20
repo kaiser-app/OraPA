@@ -47,6 +47,7 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Döntési napló, 1 = Gantt / WBS, 2 = Megbeszélések
 
     var showNewProjectDialog by remember { mutableStateOf(false) }
+    var showEditProjectDialog by remember { mutableStateOf(false) }
     var showDeleteProjectConfirm by remember { mutableStateOf(false) }
     var showNewEventDialog by remember { mutableStateOf(false) }
     var showNewTaskDialog by remember { mutableStateOf(false) }
@@ -101,18 +102,36 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Projekt Asszisztens") },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            "FÜLELŐ".forEach { char ->
+                                Text(
+                                    text = char.toString(),
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 9.sp,
+                                    lineHeight = 9.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        Text("Projekt Asszisztens", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    }
+                },
                 navigationIcon = { BackButton(onBack) },
                 actions = {
                     TextButton(onClick = { showNewProjectDialog = true }) {
-                        Text("+ Új Projekt")
+                        Text("+ Új Projekt", maxLines = 1)
                     }
                     if (activeProject != null) {
                         TextButton(
                             onClick = { showDeleteProjectConfirm = true },
                             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                         ) {
-                            Text("🗑️ Törlés")
+                            Text("🗑️", maxLines = 1)
                         }
                     }
                 }
@@ -124,10 +143,11 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
                 Modifier.widthIn(max = 680.dp).fillMaxWidth().padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // 1. Projekt Kiválasztó & Fejléc Kártya
+                // 1. Projekt Kiválasztó & Fejléc Kártya (Dupla kattintásra / nyomásra szerkeszthető)
                 item {
                     if (activeProject != null) {
                         Card(
+                            onClick = { showEditProjectDialog = true },
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant
                             )
@@ -138,17 +158,26 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(Modifier.weight(1f)) {
-                                        Text(
-                                            "${activeProject.code} · ${activeProject.name}",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 18.sp
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                "${activeProject.code} · ${activeProject.name}",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 18.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Text(
+                                                "✏️",
+                                                fontSize = 14.sp,
+                                                modifier = Modifier.padding(start = 4.dp)
+                                            )
+                                        }
                                         Text(
                                             "Felelős: ${activeProject.manager} · Céldátum: ${activeProject.targetDate}",
                                             fontSize = 13.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
+                                    Spacer(Modifier.width(8.dp))
                                     RagStatusBadge(activeProject.ragStatus)
                                 }
 
@@ -465,6 +494,61 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
                 TextButton(onClick = { aiReportText = null; aiReportTitle = null }) {
                     Text("Bezárás")
                 }
+            }
+        )
+    }
+
+    // --- Projekt Szerkesztése Dialog ---
+    if (showEditProjectDialog && activeProject != null) {
+        var pCode by remember(activeProject) { mutableStateOf(activeProject.code) }
+        var pName by remember(activeProject) { mutableStateOf(activeProject.name) }
+        var pDesc by remember(activeProject) { mutableStateOf(activeProject.description) }
+        var pManager by remember(activeProject) { mutableStateOf(activeProject.manager) }
+        var pRag by remember(activeProject) { mutableStateOf(activeProject.ragStatus) }
+        var pTarget by remember(activeProject) { mutableStateOf(activeProject.targetDate) }
+        var pBudget by remember(activeProject) { mutableStateOf(activeProject.budget ?: "") }
+        var pSpent by remember(activeProject) { mutableStateOf(activeProject.spent ?: "") }
+
+        AlertDialog(
+            onDismissRequest = { showEditProjectDialog = false },
+            title = { Text("Projekt Adatainak Szerkesztése") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = pCode, onValueChange = { pCode = it }, label = { Text("Projekt kód (pl. PRJ-01)") }, singleLine = true)
+                    OutlinedTextField(value = pName, onValueChange = { pName = it }, label = { Text("Projekt neve") }, singleLine = true)
+                    OutlinedTextField(value = pDesc, onValueChange = { pDesc = it }, label = { Text("Leírás") })
+                    OutlinedTextField(value = pManager, onValueChange = { pManager = it }, label = { Text("Projektvezető / Felelős") }, singleLine = true)
+                    Text("RAG Státusz:", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        item { FilterChip(selected = pRag == "green", onClick = { pRag = "green" }, label = { Text("🟢 Zöld") }) }
+                        item { FilterChip(selected = pRag == "amber", onClick = { pRag = "amber" }, label = { Text("🟡 Sárga") }) }
+                        item { FilterChip(selected = pRag == "red", onClick = { pRag = "red" }, label = { Text("🔴 Piros") }) }
+                    }
+                    OutlinedTextField(value = pTarget, onValueChange = { pTarget = it }, label = { Text("Céldátum (ÉÉÉÉ-HH-NN)") }, singleLine = true)
+                    OutlinedTextField(value = pBudget, onValueChange = { pBudget = it }, label = { Text("Költségkeret") }, singleLine = true)
+                    OutlinedTextField(value = pSpent, onValueChange = { pSpent = it }, label = { Text("Felhasznált keret") }, singleLine = true)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val updated = activeProject.copy(
+                        code = pCode.trim(),
+                        name = pName.trim(),
+                        description = pDesc.trim(),
+                        manager = pManager.trim(),
+                        ragStatus = pRag,
+                        targetDate = pTarget.trim(),
+                        budget = pBudget.ifBlank { null },
+                        spent = pSpent.ifBlank { null }
+                    )
+                    scope.launch(Dispatchers.IO) {
+                        db.projectDao().update(updated)
+                    }
+                    showEditProjectDialog = false
+                }) { Text("Mentés") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditProjectDialog = false }) { Text("Mégse") }
             }
         )
     }

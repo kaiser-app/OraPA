@@ -269,12 +269,21 @@ fun TodayScreen(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "🎙️ Fülelő",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        // Függőleges "FÜLELŐ" felirat a bal oldalon
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            "FÜLELŐ".forEach { char ->
+                                Text(
+                                    text = char.toString(),
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 9.sp,
+                                    lineHeight = 9.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
                     }
                 },
                 actions = {
@@ -299,57 +308,7 @@ fun TodayScreen(
                 Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // --- A) ÉLŐ FELVÉTELI BANNER IDŐZÍTŐVEL ÉS MOZGÓ FÜLLEL ---
-                if (recording) {
-                    item {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.error)
-                                        .rotate(earAngle),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("👂", fontSize = 26.sp)
-                                }
-                                Spacer(Modifier.width(12.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        "● FELVÉTEL FOLYAMATBAN…",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                    val m = elapsedSec / 60
-                                    val s = elapsedSec % 60
-                                    Text(
-                                        "%02d:%02d".format(m, s),
-                                        fontWeight = FontWeight.Black,
-                                        fontSize = 24.sp,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                                Button(
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                    onClick = onStopRecording
-                                ) {
-                                    Text("■ Leállítás", fontSize = 12.sp, maxLines = 1)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // --- B) AKCIÓ SÁV & KÜLSŐ HANG IMPORTÁLÁSA ---
+                // --- AKCIÓ SÁV & KÜLSŐ HANG IMPORTÁLÁSA ---
                 item {
                     Row(
                         Modifier.fillMaxWidth(),
@@ -390,6 +349,54 @@ fun TodayScreen(
                                 null -> {}
                             }
                         }
+                    }
+                }
+
+                // --- ÉLŐ FELVÉTELI BANNER A KIJELZŐ KÖZEPÉN (DUPLIKÁLT LEÁLLÍTÁS GOMB NÉLKÜL) ---
+                if (recording) {
+                    item {
+                        Spacer(Modifier.height(16.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.error)
+                                        .rotate(earAngle),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("👂", fontSize = 30.sp)
+                                }
+                                Spacer(Modifier.width(16.dp))
+                                Column(horizontalAlignment = Alignment.Start) {
+                                    Text(
+                                        "● FELVÉTEL FOLYAMATBAN…",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    val m = elapsedSec / 60
+                                    val s = elapsedSec % 60
+                                    Text(
+                                        "%02d:%02d".format(m, s),
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 28.sp,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
                     }
                 }
 
