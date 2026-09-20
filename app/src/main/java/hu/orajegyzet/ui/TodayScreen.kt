@@ -267,25 +267,7 @@ fun TodayScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Függőleges "FÜLELŐ" felirat a bal oldalon
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            "FÜLELŐ".forEach { char ->
-                                Text(
-                                    text = char.toString(),
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 9.sp,
-                                    lineHeight = 9.sp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    }
-                },
+                title = { Text("Fülelő", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary) },
                 actions = {
                     TextButton(onClick = onOpenAssistant) { Text("Projekt AI", maxLines = 1) }
                     TextButton(onClick = onOpenHistory) { Text("Korábbi", maxLines = 1) }
@@ -303,141 +285,176 @@ fun TodayScreen(
             }
         }
     ) { pad ->
-        Box(Modifier.padding(pad).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-            LazyColumn(
-                Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+        Row(
+            modifier = Modifier
+                .padding(pad)
+                .fillMaxSize()
+        ) {
+            // --- BAL OLDALI FÜGGŐLEGES FÜLELŐ SÁV (a felhasználó által pirossal jelölt terület) ---
+            Column(
+                modifier = Modifier
+                    .width(32.dp)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .padding(vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top
             ) {
-                // --- AKCIÓ SÁV & KÜLSŐ HANG IMPORTÁLÁSA ---
-                item {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Mai órák & Projektek", fontWeight = FontWeight.Medium, fontSize = 18.sp)
-                        OutlinedButton(
-                            onClick = { audioPicker.launch("audio/*") }
+                Text("🎙️", fontSize = 12.sp)
+                Spacer(Modifier.height(8.dp))
+                "FÜLELŐ".forEach { char ->
+                    Text(
+                        text = char.toString(),
+                        fontWeight = FontWeight.Black,
+                        fontSize = 11.sp,
+                        lineHeight = 13.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            // --- TARTALMI RÉSZ (JOBB OLDAL) ---
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                LazyColumn(
+                    Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // --- AKCIÓ SÁV & KÜLSŐ HANG IMPORTÁLÁSA ---
+                    item {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("📁 Hang importálása", fontSize = 12.sp, maxLines = 1)
+                            Text("Mai órák & Projektek", fontWeight = FontWeight.Medium, fontSize = 18.sp)
+                            OutlinedButton(
+                                onClick = { audioPicker.launch("audio/*") }
+                            ) {
+                                Text("📁 Hang", fontSize = 12.sp, maxLines = 1)
+                            }
+                        }
+                        if (lessons.isEmpty() && projects.isEmpty()) {
+                            Text(
+                                "Nincs felvitt óra vagy projekt mára.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
-                    if (lessons.isEmpty() && projects.isEmpty()) {
-                        Text(
-                            "Nincs felvitt óra vagy projekt mára.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
 
-                items(lessons) { l ->
-                    val note = notes.firstOrNull { it.lessonId == l.id }
-                    Card {
-                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(l.subject, fontWeight = FontWeight.Medium)
-                                Text("${fmt(l.startMin)}–${fmt(l.endMin)}" +
-                                    (if (l.room.isNotBlank()) " · ${l.room}" else ""),
+                    items(lessons) { l ->
+                        val note = notes.firstOrNull { it.lessonId == l.id }
+                        Card {
+                            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(l.subject, fontWeight = FontWeight.Medium)
+                                    Text("${fmt(l.startMin)}–${fmt(l.endMin)}" +
+                                        (if (l.room.isNotBlank()) " · ${l.room}" else ""),
+                                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                when (note?.status) {
+                                    NoteStatus.RECORDING -> Text("● felvétel", color = MaterialTheme.colorScheme.error)
+                                    NoteStatus.QUEUED -> ProcessingIndicator()
+                                    NoteStatus.PROCESSING -> ProcessingIndicator()
+                                    NoteStatus.DONE -> TextButton(onClick = { onOpenNote(note.id) }) { Text("Jegyzet") }
+                                    NoteStatus.ERROR -> Text("hiba", color = MaterialTheme.colorScheme.error)
+                                    null -> {}
+                                }
+                            }
+                        }
+                    }
+
+                    // --- ÉLŐ FELVÉTELI BANNER A KIJELZŐ KÖZEPÉN (DUPLIKÁLT LEÁLLÍTÁS GOMB NÉLKÜL) ---
+                    if (recording) {
+                        item {
+                            Spacer(Modifier.height(16.dp))
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(54.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.error)
+                                            .rotate(earAngle),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("👂", fontSize = 30.sp)
+                                    }
+                                    Spacer(Modifier.width(16.dp))
+                                    Column(horizontalAlignment = Alignment.Start) {
+                                        Text(
+                                            "● FELVÉTEL FOLYAMATBAN…",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                        val m = elapsedSec / 60
+                                        val s = elapsedSec % 60
+                                        Text(
+                                            "%02d:%02d".format(m, s),
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 28.sp,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(16.dp))
+                        }
+                    }
+
+                    item {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Mai jegyzetek & Dok. Kódok", fontWeight = FontWeight.Medium, fontSize = 18.sp)
+                    }
+
+                    val processing = notes.filter {
+                        it.status == NoteStatus.PROCESSING || it.status == NoteStatus.QUEUED
+                    }
+                    items(processing) { n ->
+                        Card {
+                            Row(Modifier.fillMaxWidth().padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("${n.subject} · ${n.docCode.ifBlank { fmt(n.startMin) }}", fontWeight = FontWeight.Medium)
+                                    ProcessingIndicator(Modifier.padding(top = 4.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    items(notes.filter { it.status == NoteStatus.DONE }) { n ->
+                        Card(onClick = { onOpenNote(n.id) }) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                                Column(Modifier.fillMaxWidth()) {
+                                    Text(n.subject, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    if (n.docCode.isNotBlank()) {
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            n.docCode,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Text(n.summary.take(140) + if (n.summary.length > 140) "…" else "",
                                     fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            when (note?.status) {
-                                NoteStatus.RECORDING -> Text("● felvétel", color = MaterialTheme.colorScheme.error)
-                                NoteStatus.QUEUED -> ProcessingIndicator()
-                                NoteStatus.PROCESSING -> ProcessingIndicator()
-                                NoteStatus.DONE -> TextButton(onClick = { onOpenNote(note.id) }) { Text("Jegyzet") }
-                                NoteStatus.ERROR -> Text("hiba", color = MaterialTheme.colorScheme.error)
-                                null -> {}
-                            }
-                        }
-                    }
-                }
-
-                // --- ÉLŐ FELVÉTELI BANNER A KIJELZŐ KÖZEPÉN (DUPLIKÁLT LEÁLLÍTÁS GOMB NÉLKÜL) ---
-                if (recording) {
-                    item {
-                        Spacer(Modifier.height(16.dp))
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(20.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(54.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.error)
-                                        .rotate(earAngle),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("👂", fontSize = 30.sp)
-                                }
-                                Spacer(Modifier.width(16.dp))
-                                Column(horizontalAlignment = Alignment.Start) {
-                                    Text(
-                                        "● FELVÉTEL FOLYAMATBAN…",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                    val m = elapsedSec / 60
-                                    val s = elapsedSec % 60
-                                    Text(
-                                        "%02d:%02d".format(m, s),
-                                        fontWeight = FontWeight.Black,
-                                        fontSize = 28.sp,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(16.dp))
-                    }
-                }
-
-                item {
-                    Spacer(Modifier.height(8.dp))
-                    Text("Mai jegyzetek & Dok. Kódok", fontWeight = FontWeight.Medium, fontSize = 18.sp)
-                }
-
-                val processing = notes.filter {
-                    it.status == NoteStatus.PROCESSING || it.status == NoteStatus.QUEUED
-                }
-                items(processing) { n ->
-                    Card {
-                        Row(Modifier.fillMaxWidth().padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("${n.subject} · ${n.docCode.ifBlank { fmt(n.startMin) }}", fontWeight = FontWeight.Medium)
-                                ProcessingIndicator(Modifier.padding(top = 4.dp))
-                            }
-                        }
-                    }
-                }
-
-                items(notes.filter { it.status == NoteStatus.DONE }) { n ->
-                    Card(onClick = { onOpenNote(n.id) }) {
-                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                            Column(Modifier.fillMaxWidth()) {
-                                Text(n.subject, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                if (n.docCode.isNotBlank()) {
-                                    Spacer(Modifier.height(2.dp))
-                                    Text(
-                                        n.docCode,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            Text(n.summary.take(140) + if (n.summary.length > 140) "…" else "",
-                                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
