@@ -1,5 +1,9 @@
 package hu.orajegyzet.ui
 
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.imePadding
@@ -289,10 +293,52 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
             item {
                 SettingSection("Online (Gemini)", expOnline, { expOnline = !expOnline }) {
-                    OutlinedTextField(s.geminiApiKey, { s = s.copy(geminiApiKey = it) },
-                        label = { Text("Gemini API-kulcs") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(s.geminiModel, { s = s.copy(geminiModel = it) },
-                        label = { Text("Modell") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        value = s.geminiApiKey,
+                        onValueChange = { s = s.copy(geminiApiKey = it.trim()) },
+                        label = { Text("Gemini API-kulcs") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                val intent = Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("https://aistudio.google.com/apikey")
+                                )
+                                ctx.startActivity(intent)
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("🔑 API-kulcs generálása")
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = cm.primaryClip?.getItemAt(0)?.text?.toString()?.trim()
+                                if (!clip.isNullOrBlank()) {
+                                    s = s.copy(geminiApiKey = clip)
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("📋 Beillesztés")
+                        }
+                    }
+                    Text(
+                        "Az API-kulcs ingyenes. Kattints a gombra, jelentkezz be a Google-fiókodba, kattints a 'Create API key' gombra, másold ki, majd nyomj a 'Beillesztés' gombra.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = s.geminiModel,
+                        onValueChange = { s = s.copy(geminiModel = it.trim()) },
+                        label = { Text("Modell") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
                 }
             }
             item {
