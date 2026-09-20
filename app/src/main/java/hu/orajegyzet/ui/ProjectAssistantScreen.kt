@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -46,6 +47,7 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Döntési napló, 1 = Gantt / WBS, 2 = Megbeszélések
 
     var showNewProjectDialog by remember { mutableStateOf(false) }
+    var showDeleteProjectConfirm by remember { mutableStateOf(false) }
     var showNewEventDialog by remember { mutableStateOf(false) }
     var showNewTaskDialog by remember { mutableStateOf(false) }
 
@@ -104,6 +106,14 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
                 actions = {
                     TextButton(onClick = { showNewProjectDialog = true }) {
                         Text("+ Új Projekt")
+                    }
+                    if (activeProject != null) {
+                        TextButton(
+                            onClick = { showDeleteProjectConfirm = true },
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("🗑️ Törlés")
+                        }
                     }
                 }
             )
@@ -175,15 +185,15 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
                                     }
                                 }
 
-                                // Projekt választó legördülő
+                                // Projekt választó vízszintes görgethető sor
                                 if (projects.size > 1) {
                                     Spacer(Modifier.height(8.dp))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        projects.forEach { p ->
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(projects) { p ->
                                             FilterChip(
                                                 selected = p.id == activeProject.id,
                                                 onClick = { selectedProjectId = p.id },
-                                                label = { Text(p.code) }
+                                                label = { Text(p.code, maxLines = 1) }
                                             )
                                         }
                                     }
@@ -197,49 +207,49 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("Granularitás / Nézet", fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = granularity == Granularity.EXECUTIVE,
-                                onClick = { granularity = Granularity.EXECUTIVE },
-                                label = { Text("👑 Vezetői") }
-                            )
-                            FilterChip(
-                                selected = granularity == Granularity.COORDINATOR,
-                                onClick = { granularity = Granularity.COORDINATOR },
-                                label = { Text("👥 Koordinátori") }
-                            )
-                            FilterChip(
-                                selected = granularity == Granularity.OPERATIONAL,
-                                onClick = { granularity = Granularity.OPERATIONAL },
-                                label = { Text("💻 Operatív") }
-                            )
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            item {
+                                FilterChip(
+                                    selected = granularity == Granularity.EXECUTIVE,
+                                    onClick = { granularity = Granularity.EXECUTIVE },
+                                    label = { Text("👑 Vezetői", maxLines = 1) }
+                                )
+                            }
+                            item {
+                                FilterChip(
+                                    selected = granularity == Granularity.COORDINATOR,
+                                    onClick = { granularity = Granularity.COORDINATOR },
+                                    label = { Text("👥 Koordinátori", maxLines = 1) }
+                                )
+                            }
+                            item {
+                                FilterChip(
+                                    selected = granularity == Granularity.OPERATIONAL,
+                                    onClick = { granularity = Granularity.OPERATIONAL },
+                                    label = { Text("💻 Operatív", maxLines = 1) }
+                                )
+                            }
                         }
                     }
                 }
 
                 // 3. AI Akciógombok (Vezetői Összefoglaló, Státuszjelentés, QA Audit)
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { runAiAnalysis("Vezetői Összefoglaló") },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("✨ Vezetői", fontSize = 12.sp)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item {
+                            OutlinedButton(onClick = { runAiAnalysis("Vezetői Összefoglaló") }) {
+                                Text("✨ Vezetői Összefoglaló", fontSize = 12.sp, maxLines = 1)
+                            }
                         }
-                        OutlinedButton(
-                            onClick = { runAiAnalysis("Státuszjelentés") },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("📊 Státusz", fontSize = 12.sp)
+                        item {
+                            OutlinedButton(onClick = { runAiAnalysis("Státuszjelentés") }) {
+                                Text("📊 Státuszjelentés", fontSize = 12.sp, maxLines = 1)
+                            }
                         }
-                        OutlinedButton(
-                            onClick = { runAiAnalysis("QA Minőségi Audit") },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("🛡️ QA Audit", fontSize = 12.sp)
+                        item {
+                            OutlinedButton(onClick = { runAiAnalysis("QA Minőségi Audit") }) {
+                                Text("🛡️ QA Audit", fontSize = 12.sp, maxLines = 1)
+                            }
                         }
                     }
                 }
@@ -250,17 +260,17 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
                         Tab(
                             selected = selectedTab == 0,
                             onClick = { selectedTab = 0 },
-                            text = { Text("Döntési Napló (${events.size})") }
+                            text = { Text("Döntések (${events.size})", maxLines = 1) }
                         )
                         Tab(
                             selected = selectedTab == 1,
                             onClick = { selectedTab = 1 },
-                            text = { Text("Gantt WBS (${tasks.size})") }
+                            text = { Text("Gantt WBS (${tasks.size})", maxLines = 1) }
                         )
                         Tab(
                             selected = selectedTab == 2,
                             onClick = { selectedTab = 2 },
-                            text = { Text("Fülelő (${meetings.size})") }
+                            text = { Text("Fülelő (${meetings.size})", maxLines = 1) }
                         )
                     }
                 }
@@ -273,9 +283,9 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Döntések, Mérföldkövek & Kockázatok", fontWeight = FontWeight.Bold)
+                            Text("Döntések & Kockázatok", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                             TextButton(onClick = { showNewEventDialog = true }) {
-                                Text("+ Új Döntés / Kockázat")
+                                Text("+ Új Döntés", maxLines = 1)
                             }
                         }
                     }
@@ -349,9 +359,9 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Gantt Feladathálózat (WBS)", fontWeight = FontWeight.Bold)
+                            Text("Gantt Feladathálózat (WBS)", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                             TextButton(onClick = { showNewTaskDialog = true }) {
-                                Text("+ Új Feladat")
+                                Text("+ Új Feladat", maxLines = 1)
                             }
                         }
                     }
@@ -459,6 +469,31 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
         )
     }
 
+    // --- Projekt Törlése Dialog ---
+    if (showDeleteProjectConfirm && activeProject != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteProjectConfirm = false },
+            title = { Text("Projekt Törlése") },
+            text = { Text("Biztosan törölni szeretnéd a(z) '${activeProject.name}' (${activeProject.code}) projektet és a hozzá tartozó döntéseket?") },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            db.projectEventDao().deleteByProject(activeProject.id)
+                            db.ganttTaskDao().deleteByProject(activeProject.id)
+                            db.projectDao().delete(activeProject)
+                        }
+                        showDeleteProjectConfirm = false
+                    }
+                ) { Text("Igen, Törlés") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteProjectConfirm = false }) { Text("Mégse") }
+            }
+        )
+    }
+
     // --- Új Projekt Létrehozása Dialog ---
     if (showNewProjectDialog) {
         var pCode by remember { mutableStateOf("PRJ-02") }
@@ -537,10 +572,10 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
             title = { Text("Új Döntés / Kockázat / Mérföldkő") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilterChip(selected = type == "decision", onClick = { type = "decision" }, label = { Text("Döntés") })
-                        FilterChip(selected = type == "risk", onClick = { type = "risk" }, label = { Text("Kockázat") })
-                        FilterChip(selected = type == "milestone", onClick = { type = "milestone" }, label = { Text("Mérföldkő") })
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        item { FilterChip(selected = type == "decision", onClick = { type = "decision" }, label = { Text("Döntés", maxLines = 1) }) }
+                        item { FilterChip(selected = type == "risk", onClick = { type = "risk" }, label = { Text("Kockázat", maxLines = 1) }) }
+                        item { FilterChip(selected = type == "milestone", onClick = { type = "milestone" }, label = { Text("Mérföldkő", maxLines = 1) }) }
                     }
                     OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Cím") }, singleLine = true)
                     OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("Részletes leírás") })
@@ -581,11 +616,11 @@ fun ProjectAssistantScreen(onBack: () -> Unit, onOpenNote: (Long) -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Feladat címe") }, singleLine = true)
                     OutlinedTextField(value = assignee, onValueChange = { assignee = it }, label = { Text("Felelős neve") }, singleLine = true)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilterChip(selected = priority == "low", onClick = { priority = "low" }, label = { Text("Alacsony") })
-                        FilterChip(selected = priority == "medium", onClick = { priority = "medium" }, label = { Text("Közepes") })
-                        FilterChip(selected = priority == "high", onClick = { priority = "high" }, label = { Text("Magas") })
-                        FilterChip(selected = priority == "critical", onClick = { priority = "critical" }, label = { Text("Kritikus") })
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        item { FilterChip(selected = priority == "low", onClick = { priority = "low" }, label = { Text("Alacsony", maxLines = 1) }) }
+                        item { FilterChip(selected = priority == "medium", onClick = { priority = "medium" }, label = { Text("Közepes", maxLines = 1) }) }
+                        item { FilterChip(selected = priority == "high", onClick = { priority = "high" }, label = { Text("Magas", maxLines = 1) }) }
+                        item { FilterChip(selected = priority == "critical", onClick = { priority = "critical" }, label = { Text("Kritikus", maxLines = 1) }) }
                     }
                 }
             },

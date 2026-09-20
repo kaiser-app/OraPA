@@ -4,9 +4,12 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Environment
 import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,6 +23,7 @@ import androidx.core.content.FileProvider
 import hu.orajegyzet.data.*
 import hu.orajegyzet.rec.RecordingService
 import hu.orajegyzet.work.ProcessingWorker
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
@@ -78,41 +82,47 @@ fun TodayScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("1. Kontextus / Téma választása:", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilterChip(
-                            selected = selectedContextType == "project",
-                            onClick = { selectedContextType = "project" },
-                            label = { Text("Projekt") }
-                        )
-                        FilterChip(
-                            selected = selectedContextType == "lesson",
-                            onClick = { selectedContextType = "lesson" },
-                            label = { Text("Órarendi óra") }
-                        )
-                        FilterChip(
-                            selected = selectedContextType == "custom",
-                            onClick = { selectedContextType = "custom" },
-                            label = { Text("Egyedi téma") }
-                        )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        item {
+                            FilterChip(
+                                selected = selectedContextType == "project",
+                                onClick = { selectedContextType = "project" },
+                                label = { Text("Projekt", maxLines = 1) }
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = selectedContextType == "lesson",
+                                onClick = { selectedContextType = "lesson" },
+                                label = { Text("Órarendi óra", maxLines = 1) }
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = selectedContextType == "custom",
+                                onClick = { selectedContextType = "custom" },
+                                label = { Text("Egyedi téma", maxLines = 1) }
+                            )
+                        }
                     }
 
                     if (selectedContextType == "project" && projects.isNotEmpty()) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            projects.forEach { p ->
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(projects) { p ->
                                 FilterChip(
                                     selected = selectedProjectId == p.id,
                                     onClick = { selectedProjectId = p.id },
-                                    label = { Text(p.code) }
+                                    label = { Text(p.code, maxLines = 1) }
                                 )
                             }
                         }
                     } else if (selectedContextType == "lesson" && lessons.isNotEmpty()) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            lessons.forEach { l ->
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(lessons) { l ->
                                 FilterChip(
                                     selected = selectedLessonId == l.id,
                                     onClick = { selectedLessonId = l.id },
-                                    label = { Text(l.subject) }
+                                    label = { Text(l.subject, maxLines = 1) }
                                 )
                             }
                         }
@@ -127,12 +137,12 @@ fun TodayScreen(
                     }
 
                     Text("2. Dokumentum Típusa:", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilterChip(selected = selectedDocType == "JEG", onClick = { selectedDocType = "JEG" }, label = { Text("📝 JEG") })
-                        FilterChip(selected = selectedDocType == "EML", onClick = { selectedDocType = "EML" }, label = { Text("📌 EML") })
-                        FilterChip(selected = selectedDocType == "JZK", onClick = { selectedDocType = "JZK" }, label = { Text("📋 JZK") })
-                        FilterChip(selected = selectedDocType == "VEZ", onClick = { selectedDocType = "VEZ" }, label = { Text("👑 VEZ") })
-                        FilterChip(selected = selectedDocType == "STA", onClick = { selectedDocType = "STA" }, label = { Text("📊 STA") })
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        item { FilterChip(selected = selectedDocType == "JEG", onClick = { selectedDocType = "JEG" }, label = { Text("📝 JEG", maxLines = 1) }) }
+                        item { FilterChip(selected = selectedDocType == "EML", onClick = { selectedDocType = "EML" }, label = { Text("📌 EML", maxLines = 1) }) }
+                        item { FilterChip(selected = selectedDocType == "JZK", onClick = { selectedDocType = "JZK" }, label = { Text("📋 JZK", maxLines = 1) }) }
+                        item { FilterChip(selected = selectedDocType == "VEZ", onClick = { selectedDocType = "VEZ" }, label = { Text("👑 VEZ", maxLines = 1) }) }
+                        item { FilterChip(selected = selectedDocType == "STA", onClick = { selectedDocType = "STA" }, label = { Text("📊 STA", maxLines = 1) }) }
                     }
 
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
@@ -267,13 +277,19 @@ fun TodayScreen(
                 items(notes.filter { it.status == NoteStatus.DONE }) { n ->
                     Card(onClick = { onOpenNote(n.id) }) {
                         Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(n.subject, fontWeight = FontWeight.Bold)
+                            Column(Modifier.fillMaxWidth()) {
+                                Text(n.subject, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                 if (n.docCode.isNotBlank()) {
-                                    Text(n.docCode, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        n.docCode,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             }
-                            Spacer(Modifier.height(2.dp))
+                            Spacer(Modifier.height(4.dp))
                             Text(n.summary.take(140) + if (n.summary.length > 140) "…" else "",
                                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -297,6 +313,8 @@ fun NoteDetailScreen(noteId: Long, onBack: () -> Unit) {
     var eStructured by remember { mutableStateOf("") }
     var eTranscript by remember { mutableStateOf("") }
 
+    var alertMessage by remember { mutableStateOf<String?>(null) }
+
     // Magyar felolvasó (beépített Android TTS, offline)
     val tts = remember {
         val holder = arrayOfNulls<TextToSpeech>(1)
@@ -317,6 +335,40 @@ fun NoteDetailScreen(noteId: Long, onBack: () -> Unit) {
         if (n.transcript.isNotBlank()) append("LEIRAT\n").append(n.transcript)
     }
 
+    fun sendEmail() {
+        scope.launch(Dispatchers.IO) {
+            val s = Settings.get(ctx)
+            if (s.email.isBlank()) {
+                alertMessage = "Kérlek add meg a címzett e-mail címet a Beállítások menüpontban!"
+            } else {
+                try {
+                    val intent = Intent(Intent.ACTION_SENDTO).apply {
+                        data = Uri.parse("mailto:${s.email}")
+                        putExtra(Intent.EXTRA_SUBJECT, "[Fülelő] ${n.docCode.ifBlank { n.subject }} - ${n.dateIso}")
+                        putExtra(Intent.EXTRA_TEXT, fullText())
+                    }
+                    ctx.startActivity(Intent.createChooser(intent, "E-mail küldése"))
+                } catch (e: Exception) {
+                    alertMessage = "Hiba az e-mail küldéskor: ${e.message}"
+                }
+            }
+        }
+    }
+
+    fun saveToPhone() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val fileName = "${n.docCode.ifBlank { "JEGYZET_${n.id}" }}.txt"
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val targetFile = File(downloadsDir, fileName)
+                targetFile.writeText(fullText())
+                alertMessage = "Sikeresen elmentve a Letöltések mappába:\n${targetFile.absolutePath}"
+            } catch (e: Exception) {
+                alertMessage = "Hiba a fájl mentésekor: ${e.message}"
+            }
+        }
+    }
+
     Scaffold(topBar = {
         TopAppBar(title = { Text(if (n.docCode.isNotBlank()) n.docCode else n.subject) }, navigationIcon = { BackButton(onBack) })
     }) { pad ->
@@ -329,51 +381,73 @@ fun NoteDetailScreen(noteId: Long, onBack: () -> Unit) {
 
             if (!editing) {
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(onClick = {
-                                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                cm.setPrimaryClip(ClipData.newPlainText("jegyzet", fullText()))
-                            }) { Text("Másolás") }
-                            TextButton(onClick = {
-                                val i = Intent(Intent.ACTION_SEND).setType("text/plain")
-                                    .putExtra(Intent.EXTRA_TEXT, fullText())
-                                ctx.startActivity(Intent.createChooser(i, "Jegyzet megosztása"))
-                            }) { Text("Megosztás") }
-                            TextButton(onClick = {
-                                eSummary = n.summary; eStructured = n.structured; eTranscript = n.transcript
-                                editing = true
-                            }) { Text("Szerkesztés") }
-                            TextButton(onClick = {
-                                if (speaking) { runCatching { tts.stop() }; speaking = false }
-                                else {
-                                    val text = if (n.summary.isNotBlank() && !n.summary.startsWith("("))
-                                        n.summary else n.transcript
-                                    if (text.isNotBlank()) {
-                                        runCatching { tts.setLanguage(Locale("hu", "HU")) }
-                                        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "note")
-                                        speaking = true
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // 1. Akció sor (Görgethető gombok, így nincs függőleges szövegtörés)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            item {
+                                OutlinedButton(onClick = {
+                                    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    cm.setPrimaryClip(ClipData.newPlainText("jegyzet", fullText()))
+                                }) { Text("📋 Másolás", maxLines = 1) }
+                            }
+                            item {
+                                OutlinedButton(onClick = {
+                                    val i = Intent(Intent.ACTION_SEND).setType("text/plain")
+                                        .putExtra(Intent.EXTRA_TEXT, fullText())
+                                    ctx.startActivity(Intent.createChooser(i, "Jegyzet megosztása"))
+                                }) { Text("🔗 Megosztás", maxLines = 1) }
+                            }
+                            item {
+                                OutlinedButton(onClick = { sendEmail() }) { Text("📧 Email küldése", maxLines = 1) }
+                            }
+                            item {
+                                OutlinedButton(onClick = { saveToPhone() }) { Text("💾 Mentés telefonra", maxLines = 1) }
+                            }
+                            item {
+                                OutlinedButton(onClick = {
+                                    eSummary = n.summary; eStructured = n.structured; eTranscript = n.transcript
+                                    editing = true
+                                }) { Text("✏️ Szerkesztés", maxLines = 1) }
+                            }
+                            item {
+                                OutlinedButton(onClick = {
+                                    if (speaking) { runCatching { tts.stop() }; speaking = false }
+                                    else {
+                                        val text = if (n.summary.isNotBlank() && !n.summary.startsWith("("))
+                                            n.summary else n.transcript
+                                        if (text.isNotBlank()) {
+                                            runCatching { tts.setLanguage(Locale("hu", "HU")) }
+                                            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "note")
+                                            speaking = true
+                                        }
                                     }
-                                }
-                            }) { Text(if (speaking) "Leállítás" else "Felolvasás") }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(onClick = {
-                                scope.launch { Db.get(ctx).noteDao().update(n.copy(status = NoteStatus.PROCESSING)) }
-                                ProcessingWorker.resummarize(ctx, n.id)
-                            }) { Text("Újra-összefoglalás") }
-                            val audioOk = n.audioPath?.let { File(it).exists() } == true
-                            if (audioOk) {
-                                TextButton(onClick = {
-                                    val f = File(n.audioPath!!)
-                                    val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f)
-                                    val i = Intent(Intent.ACTION_SEND).setType("audio/mp4")
-                                        .putExtra(Intent.EXTRA_STREAM, uri)
-                                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    ctx.startActivity(Intent.createChooser(i, "Hang mentése / megosztása"))
-                                }) { Text("Hang mentése") }
+                                }) { Text(if (speaking) "⏹️ Leállítás" else "🔊 Felolvasás", maxLines = 1) }
                             }
                         }
+
+                        // 2. Másodlagos akciók
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            item {
+                                OutlinedButton(onClick = {
+                                    scope.launch { Db.get(ctx).noteDao().update(n.copy(status = NoteStatus.PROCESSING)) }
+                                    ProcessingWorker.resummarize(ctx, n.id)
+                                }) { Text("✨ Újra-összefoglalás", maxLines = 1) }
+                            }
+                            val audioOk = n.audioPath?.let { File(it).exists() } == true
+                            if (audioOk) {
+                                item {
+                                    OutlinedButton(onClick = {
+                                        val f = File(n.audioPath!!)
+                                        val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", f)
+                                        val i = Intent(Intent.ACTION_SEND).setType("audio/mp4")
+                                            .putExtra(Intent.EXTRA_STREAM, uri)
+                                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        ctx.startActivity(Intent.createChooser(i, "Hang mentése / megosztása"))
+                                    }) { Text("🎧 Hang mentése", maxLines = 1) }
+                                }
+                            }
+                        }
+
                         if (n.audioPath != null && File(n.audioPath!!).exists()) {
                             Text("A nyers hang kb. 30 percig érhető el, utána törlődik.",
                                 fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -433,5 +507,16 @@ fun NoteDetailScreen(noteId: Long, onBack: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (alertMessage != null) {
+        AlertDialog(
+            onDismissRequest = { alertMessage = null },
+            title = { Text("Értesítés") },
+            text = { Text(alertMessage!!) },
+            confirmButton = {
+                TextButton(onClick = { alertMessage = null }) { Text("Rendben") }
+            }
+        )
     }
 }

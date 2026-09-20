@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import hu.orajegyzet.bell.BellScheduler
 import hu.orajegyzet.data.*
 import hu.orajegyzet.work.DigestWorker
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 private val DAYS = listOf("H", "K", "Sze", "Cs", "P", "Szo", "V")
@@ -232,6 +233,30 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
     }
 
+    var confirmResetAll by remember { mutableStateOf(false) }
+
+    if (confirmResetAll) {
+        AlertDialog(
+            onDismissRequest = { confirmResetAll = false },
+            title = { Text("Adatbázis Törlés & Gyári Reset") },
+            text = { Text("Biztosan törölni szeretnéd az ÖSSZES eddigi jegyzetet, döntést és feladatot? A sorszámozás újra a 001-ről fog indulni.") },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            Db.resetAllData(ctx)
+                        }
+                        confirmResetAll = false
+                    }
+                ) { Text("Igen, Törlés & Reset") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmResetAll = false }) { Text("Mégse") }
+            }
+        )
+    }
+
     Scaffold(topBar = {
         TopAppBar(title = { Text("Beállítások") },
             navigationIcon = { BackButton(onBack) })
@@ -428,6 +453,15 @@ fun SettingsScreen(onBack: () -> Unit) {
                     }
                     onBack()
                 }, modifier = Modifier.fillMaxWidth()) { Text("Mentés") }
+            }
+            item {
+                OutlinedButton(
+                    onClick = { confirmResetAll = true },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("💣 Összes adat törlése / Reset (001-ről indul)")
+                }
             }
         }
         }

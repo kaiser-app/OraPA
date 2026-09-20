@@ -108,6 +108,9 @@ interface LessonDao {
     @Query("SELECT * FROM lessons WHERE id = :id")
     suspend fun byId(id: Long): Lesson?
 
+    @Query("DELETE FROM lessons")
+    suspend fun deleteAll()
+
     @Insert suspend fun insert(l: Lesson): Long
     @Delete suspend fun delete(l: Lesson)
 }
@@ -144,6 +147,9 @@ interface NoteDao {
     @Query("UPDATE notes SET audioPath = null WHERE audioPath = :path")
     suspend fun clearAudioPath(path: String)
 
+    @Query("DELETE FROM notes")
+    suspend fun deleteAll()
+
     @Insert suspend fun insert(n: Note): Long
     @Update suspend fun update(n: Note)
     @Delete suspend fun delete(n: Note)
@@ -163,6 +169,9 @@ interface ProjectDao {
     @Query("SELECT * FROM projects WHERE id = :id")
     fun byIdFlow(id: String): Flow<ProjectEntity?>
 
+    @Query("DELETE FROM projects")
+    suspend fun deleteAll()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(p: ProjectEntity)
 
@@ -178,6 +187,12 @@ interface ProjectEventDao {
     @Query("SELECT * FROM project_events WHERE projectId = :projectId ORDER BY date DESC")
     suspend fun byProjectOnce(projectId: String): List<ProjectEventEntity>
 
+    @Query("DELETE FROM project_events WHERE projectId = :projectId")
+    suspend fun deleteByProject(projectId: String)
+
+    @Query("DELETE FROM project_events")
+    suspend fun deleteAll()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(e: ProjectEventEntity)
 
@@ -192,6 +207,12 @@ interface GanttTaskDao {
 
     @Query("SELECT * FROM gantt_tasks WHERE projectId = :projectId ORDER BY startDate ASC")
     suspend fun byProjectOnce(projectId: String): List<GanttTaskEntity>
+
+    @Query("DELETE FROM gantt_tasks WHERE projectId = :projectId")
+    suspend fun deleteByProject(projectId: String)
+
+    @Query("DELETE FROM gantt_tasks")
+    suspend fun deleteAll()
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(t: GanttTaskEntity)
@@ -225,6 +246,16 @@ abstract class Db : RoomDatabase() {
             inst ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "orajegyzet.db")
                 .fallbackToDestructiveMigration()
                 .build().also { inst = it }
+        }
+
+        suspend fun resetAllData(ctx: Context) {
+            val db = get(ctx)
+            db.noteDao().deleteAll()
+            db.projectEventDao().deleteAll()
+            db.ganttTaskDao().deleteAll()
+            db.projectDao().deleteAll()
+            db.lessonDao().deleteAll()
+            ProjectSeed.seedIfNeeded(ctx)
         }
     }
 }
